@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell'
 import { RequireAuth } from './routes/RequireAuth'
 import { LoginPage } from './pages/LoginPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { AddExpensePage } from './pages/AddExpensePage'
 import { AddCollectedPage } from './pages/AddCollectedPage'
 import { ReportPage } from './pages/ReportPage'
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/app" element={<AppShell />}>
               <Route index element={<Navigate to="projects" replace />} />
               <Route path="projects" element={<ProjectsPage />} />
+              <Route path="projects/:projectId" element={<ProjectDetailPage />} />
               <Route path="projects/:projectId/expenses/new" element={<AddExpensePage />} />
               <Route path="projects/:projectId/collected/new" element={<AddCollectedPage />} />
               <Route path="report" element={<ReportPage />} />

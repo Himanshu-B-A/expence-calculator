@@ -40,7 +40,7 @@ export function AddCollectedPage() {
         receivedFrom: receivedFrom.trim() || undefined,
         notes: notes.trim() || undefined,
       })
-      navigate('/app/projects', { replace: true })
+      navigate(`/app/projects/${project.id}`, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save collection.')
     } finally {
@@ -52,7 +52,7 @@ export function AddCollectedPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <div className="text-left">
         <Link
-          to="/app/projects"
+          to={`/app/projects/${project.id}`}
           className="text-sm font-medium text-cyan-300/90 hover:text-cyan-200"
         >
           ← Back to projects
