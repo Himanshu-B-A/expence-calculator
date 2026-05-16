@@ -1,0 +1,32 @@
+rules_version = '2';
+// Dev-oriented rules: any signed-in user can manage expenses/projects.
+// Tighten before production (e.g. restrict expense deletes, validate profile.role server-side).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if false;
+    }
+    match /projects/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    match /expenses/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn();
+    }
+    match /collections/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn();
+    }
+  }
+}
