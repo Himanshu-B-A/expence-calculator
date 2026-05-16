@@ -7,6 +7,8 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { AddExpensePage } from './pages/AddExpensePage'
 import { AddCollectedPage } from './pages/AddCollectedPage'
+import { EditExpensePage } from './pages/EditExpensePage'
+import { EditCollectedPage } from './pages/EditCollectedPage'
 import { ReportPage } from './pages/ReportPage'
 import { ReportDetailPage } from './pages/ReportDetailPage'
 import { TeamPage } from './pages/TeamPage'
@@ -24,6 +26,11 @@ export default function App() {
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="projects/:projectId" element={<ProjectDetailPage />} />
               <Route path="projects/:projectId/expenses/new" element={<AddExpensePage />} />
+              <Route path="projects/:projectId/expenses/:expenseId/edit" element={<EditExpensePage />} />
+              <Route
+                path="projects/:projectId/collected/:collectionId/edit"
+                element={<EditCollectedPage />}
+              />
               <Route path="projects/:projectId/collected/new" element={<AddCollectedPage />} />
               <Route path="report" element={<ReportPage />} />
               <Route path="report/:projectId" element={<ReportDetailPage />} />

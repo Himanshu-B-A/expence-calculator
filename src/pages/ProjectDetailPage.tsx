@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useExpenseApp } from '../context/ExpenseAppContext'
 import { buildProjectActivity, ProjectActivityList } from '../components/ProjectActivityList'
 import { downloadProjectCsv } from '../lib/exportCsv'
@@ -7,14 +7,25 @@ import { Button, Card, MoneyDisplay } from '../components/Ui'
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
+  const navigate = useNavigate()
   const {
     projectById,
     expensesForProject,
     collectionsForProject,
     memberNameById,
     completeProject,
+    reopenProject,
+    updateProject,
+    deleteProject,
+    deleteExpense,
+    deleteCollectedMoney,
     isAdmin,
   } = useExpenseApp()
+  const [editingProject, setEditingProject] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editSummary, setEditSummary] = useState('')
+  const [projectError, setProjectError] = useState<string | null>(null)
+  const [projectSaving, setProjectSaving] = useState(false)
 
   const project = projectId ? projectById(projectId) : undefined
 
@@ -79,6 +90,127 @@ export function ProjectDetailPage() {
           </dd>
         </div>
       </dl>
+
+      {isAdmin && (
+        <Card className="border-violet-500/20 text-left">
+          <h3 className="text-sm font-semibold text-white">Admin</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            Edit project details, reopen completed projects, or delete this project and all its
+            entries.
+          </p>
+          {projectError && (
+            <p className="mt-3 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {projectError}
+            </p>
+          )}
+          {editingProject ? (
+            <form
+              className="mt-4 space-y-3"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                setProjectError(null)
+                setProjectSaving(true)
+                try {
+                  await updateProject(project.id, editName, editSummary)
+                  setEditingProject(false)
+                } catch (err) {
+                  setProjectError(err instanceof Error ? err.message : 'Could not update project.')
+                } finally {
+                  setProjectSaving(false)
+                }
+              }}
+            >
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Name
+                </span>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950/80 px-3 py-2 text-sm text-white"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Summary (optional)
+                </span>
+                <textarea
+                  value={editSummary}
+                  onChange={(e) => setEditSummary(e.target.value)}
+                  rows={2}
+                  className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950/80 px-3 py-2 text-sm text-white"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="primary" disabled={projectSaving}>
+                  {projectSaving ? 'Saving…' : 'Save project'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={projectSaving}
+                  onClick={() => setEditingProject(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setEditName(project.name)
+                  setEditSummary(project.summary ?? '')
+                  setEditingProject(true)
+                  setProjectError(null)
+                }}
+              >
+                Edit project
+              </Button>
+              {!isOngoing && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!confirm(`Reopen “${project.name}” as an active project?`)) return
+                    setProjectError(null)
+                    try {
+                      await reopenProject(project.id)
+                    } catch (err) {
+                      setProjectError(err instanceof Error ? err.message : 'Could not reopen project.')
+                    }
+                  }}
+                >
+                  Reopen project
+                </Button>
+              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  const hasData = expenses.length > 0 || collections.length > 0
+                  const msg = hasData
+                    ? `Delete “${project.name}” and all ${expenses.length} expense(s) and ${collections.length} collection(s)? This cannot be undone.`
+                    : `Delete “${project.name}”? This cannot be undone.`
+                  if (!confirm(msg)) return
+                  setProjectError(null)
+                  try {
+                    await deleteProject(project.id)
+                    navigate('/app/projects', { replace: true })
+                  } catch (err) {
+                    setProjectError(err instanceof Error ? err.message : 'Could not delete project.')
+                  }
+                }}
+                className="inline-flex items-center justify-center rounded-xl border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/10"
+              >
+                Delete project
+              </button>
+            </div>
+          )}
+        </Card>
+      )}
 
       {isOngoing && (
         <div className="flex flex-wrap gap-2">
@@ -150,6 +282,25 @@ export function ProjectDetailPage() {
         <ProjectActivityList
           activity={activity}
           memberNameById={memberNameById}
+          projectId={project.id}
+          isAdmin={isAdmin}
+          onDelete={
+            isAdmin
+              ? async (row) => {
+                  const label = row.kind === 'expense' ? 'expense' : 'collection'
+                  if (!confirm(`Delete this ${label} “${row.title}”? This cannot be undone.`)) return
+                  try {
+                    if (row.kind === 'expense') {
+                      await deleteExpense(row.id)
+                    } else {
+                      await deleteCollectedMoney(row.id)
+                    }
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : `Could not delete ${label}.`)
+                  }
+                }
+              : undefined
+          }
           emptyMessage={
             isOngoing
               ? 'No activity yet. Add an expense or collected amount above.'

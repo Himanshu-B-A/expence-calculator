@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { CollectedMoney, Expense } from '../types'
 import { MoneyDisplay } from './Ui'
 
@@ -44,12 +45,18 @@ type Props = {
   activity: ActivityRow[]
   memberNameById: (uid?: string) => string
   emptyMessage?: string
+  projectId?: string
+  isAdmin?: boolean
+  onDelete?: (row: ActivityRow) => void
 }
 
 export function ProjectActivityList({
   activity,
   memberNameById,
   emptyMessage = 'No expenses or collections yet.',
+  projectId,
+  isAdmin = false,
+  onDelete,
 }: Props) {
   if (activity.length === 0) {
     return <p className="text-sm text-zinc-500">{emptyMessage}</p>
@@ -93,12 +100,37 @@ export function ProjectActivityList({
               </a>
             )}
           </div>
-          <p
-            className={`shrink-0 font-semibold tabular-nums ${row.kind === 'collected' ? 'text-emerald-300' : 'text-white'}`}
-          >
-            {row.kind === 'collected' ? '+' : '−'}
-            <MoneyDisplay value={row.amount} />
-          </p>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <p
+              className={`font-semibold tabular-nums ${row.kind === 'collected' ? 'text-emerald-300' : 'text-white'}`}
+            >
+              {row.kind === 'collected' ? '+' : '−'}
+              <MoneyDisplay value={row.amount} />
+            </p>
+            {isAdmin && projectId && (
+              <div className="flex gap-2">
+                <Link
+                  to={
+                    row.kind === 'expense'
+                      ? `/app/projects/${projectId}/expenses/${row.id}/edit`
+                      : `/app/projects/${projectId}/collected/${row.id}/edit`
+                  }
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-cyan-300 ring-1 ring-cyan-500/30 hover:bg-cyan-500/10"
+                >
+                  Edit
+                </Link>
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(row)}
+                    className="rounded-lg px-2 py-1 text-xs font-medium text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </li>
       ))}
     </ul>

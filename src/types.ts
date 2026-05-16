@@ -46,6 +46,18 @@ export type AddExpenseInput = {
   receiptFile?: File | null
 }
 
+export type UpdateExpenseInput = {
+  title: string
+  amount: number
+  recordedAt: string
+  category?: string
+  vendor?: string
+  paymentMethod?: PaymentMethod
+  notes?: string
+  receiptFile?: File | null
+  removeReceipt?: boolean
+}
+
 export type CollectedMoney = {
   id: string
   projectId: string
@@ -59,6 +71,14 @@ export type CollectedMoney = {
 
 export type AddCollectedMoneyInput = {
   projectId: string
+  title: string
+  amount: number
+  recordedAt: string
+  receivedFrom?: string
+  notes?: string
+}
+
+export type UpdateCollectedMoneyInput = {
   title: string
   amount: number
   recordedAt: string

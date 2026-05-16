@@ -16,16 +16,18 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { adminEmailList, getFirebase, isAdminEmail, isFirebaseConfigured } from '../lib/firebase'
 import type {
   AddCollectedMoneyInput,
@@ -35,6 +37,8 @@ import type {
   Project,
   ProjectStatus,
   TeamProfile,
+  UpdateCollectedMoneyInput,
+  UpdateExpenseInput,
   UserRole,
 } from '../types'
 
@@ -57,12 +61,21 @@ type ExpenseAppValue = {
     password: string
   }) => Promise<{ ok: boolean; error?: string }>
   addExpense: (input: AddExpenseInput) => Promise<void>
+  updateExpense: (expenseId: string, input: UpdateExpenseInput) => Promise<void>
+  deleteExpense: (expenseId: string) => Promise<void>
   addCollectedMoney: (input: AddCollectedMoneyInput) => Promise<void>
+  updateCollectedMoney: (collectionId: string, input: UpdateCollectedMoneyInput) => Promise<void>
+  deleteCollectedMoney: (collectionId: string) => Promise<void>
   projectById: (id: string) => Project | undefined
+  expenseById: (id: string) => Expense | undefined
+  collectionById: (id: string) => CollectedMoney | undefined
   expensesForProject: (projectId: string) => Expense[]
   collectionsForProject: (projectId: string) => CollectedMoney[]
   memberNameById: (uid?: string) => string
   completeProject: (projectId: string) => Promise<void>
+  reopenProject: (projectId: string) => Promise<void>
+  updateProject: (projectId: string, name: string, summary?: string) => Promise<void>
+  deleteProject: (projectId: string) => Promise<void>
 }
 
 const ExpenseAppContext = createContext<ExpenseAppValue | null>(null)
@@ -341,20 +354,192 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const requireAdmin = useCallback(() => {
+    if (role !== 'admin') {
+      throw new Error('Only administrators can perform this action.')
+    }
+  }, [role])
+
+  const uploadReceipt = useCallback(
+    async (projectId: string, expenseId: string, file: File) => {
+      const fb = getFirebase()
+      if (!fb) throw new Error('Firebase is not configured.')
+      const safeName = file.name.replace(/[^\w.-]/g, '_') || 'receipt'
+      const path = `receipts/${projectId}/${expenseId}/${safeName}`
+      const ref = storageRef(fb.storage, path)
+      await uploadBytes(ref, file)
+      const receiptImageUrl = await getDownloadURL(ref)
+      return { receiptImageUrl, receiptStoragePath: path }
+    },
+    [],
+  )
+
+  const removeReceiptFile = useCallback(async (storagePath?: string) => {
+    if (!storagePath) return
+    const fb = getFirebase()
+    if (!fb) return
+    await deleteObject(storageRef(fb.storage, storagePath)).catch(() => {})
+  }, [])
+
+  const updateExpense = useCallback(
+    async (expenseId: string, input: UpdateExpenseInput) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+
+      const existing = expenses.find((e) => e.id === expenseId)
+      if (!existing) throw new Error('Expense not found.')
+
+      let receiptImageUrl = existing.receiptImageUrl ?? null
+      let receiptStoragePath = existing.receiptStoragePath ?? null
+
+      if (input.removeReceipt && existing.receiptStoragePath) {
+        await removeReceiptFile(existing.receiptStoragePath)
+        receiptImageUrl = null
+        receiptStoragePath = null
+      }
+
+      if (input.receiptFile && input.receiptFile.size > 0) {
+        if (existing.receiptStoragePath) {
+          await removeReceiptFile(existing.receiptStoragePath)
+        }
+        const uploaded = await uploadReceipt(existing.projectId, expenseId, input.receiptFile)
+        receiptImageUrl = uploaded.receiptImageUrl
+        receiptStoragePath = uploaded.receiptStoragePath
+      }
+
+      await updateDoc(doc(fb.db, 'expenses', expenseId), {
+        title: input.title.trim(),
+        amount: Math.round(input.amount * 100) / 100,
+        recordedAt: input.recordedAt,
+        category: input.category?.trim() || null,
+        vendor: input.vendor?.trim() || null,
+        paymentMethod: input.paymentMethod ?? null,
+        notes: input.notes?.trim() || null,
+        receiptImageUrl,
+        receiptStoragePath,
+      })
+    },
+    [requireAdmin, expenses, uploadReceipt, removeReceiptFile],
+  )
+
+  const deleteExpense = useCallback(
+    async (expenseId: string) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+
+      const existing = expenses.find((e) => e.id === expenseId)
+      if (!existing) throw new Error('Expense not found.')
+
+      await removeReceiptFile(existing.receiptStoragePath)
+      await deleteDoc(doc(fb.db, 'expenses', expenseId))
+    },
+    [requireAdmin, expenses, removeReceiptFile],
+  )
+
+  const updateCollectedMoney = useCallback(
+    async (collectionId: string, input: UpdateCollectedMoneyInput) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+
+      await updateDoc(doc(fb.db, 'collections', collectionId), {
+        title: input.title.trim(),
+        amount: Math.round(input.amount * 100) / 100,
+        recordedAt: input.recordedAt,
+        receivedFrom: input.receivedFrom?.trim() || null,
+        notes: input.notes?.trim() || null,
+      })
+    },
+    [requireAdmin],
+  )
+
+  const deleteCollectedMoney = useCallback(
+    async (collectionId: string) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+      await deleteDoc(doc(fb.db, 'collections', collectionId))
+    },
+    [requireAdmin],
+  )
+
   const completeProject = useCallback(
     async (projectId: string) => {
       const fb = getFirebase()
-      if (!fb || role !== 'admin') return
+      if (!fb) return
+      requireAdmin()
       await updateDoc(doc(fb.db, 'projects', projectId), {
         status: 'completed',
       })
     },
-    [role],
+    [requireAdmin],
+  )
+
+  const reopenProject = useCallback(
+    async (projectId: string) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+      await updateDoc(doc(fb.db, 'projects', projectId), {
+        status: 'ongoing',
+      })
+    },
+    [requireAdmin],
+  )
+
+  const updateProject = useCallback(
+    async (projectId: string, name: string, summary?: string) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+      const trimmed = name.trim()
+      if (!trimmed) throw new Error('Project name is required.')
+      await updateDoc(doc(fb.db, 'projects', projectId), {
+        name: trimmed,
+        summary: summary?.trim() || null,
+      })
+    },
+    [requireAdmin],
+  )
+
+  const deleteProject = useCallback(
+    async (projectId: string) => {
+      const fb = getFirebase()
+      if (!fb) return
+      requireAdmin()
+
+      const projectExpenses = expenses.filter((e) => e.projectId === projectId)
+      const projectCollections = collections.filter((c) => c.projectId === projectId)
+
+      for (const e of projectExpenses) {
+        await removeReceiptFile(e.receiptStoragePath)
+      }
+
+      const batch = writeBatch(fb.db)
+      for (const e of projectExpenses) {
+        batch.delete(doc(fb.db, 'expenses', e.id))
+      }
+      for (const c of projectCollections) {
+        batch.delete(doc(fb.db, 'collections', c.id))
+      }
+      batch.delete(doc(fb.db, 'projects', projectId))
+      await batch.commit()
+    },
+    [requireAdmin, expenses, collections, removeReceiptFile],
   )
 
   const projectById = useCallback(
     (id: string) => projects.find((p) => p.id === id),
     [projects],
+  )
+
+  const expenseById = useCallback((id: string) => expenses.find((e) => e.id === id), [expenses])
+
+  const collectionById = useCallback(
+    (id: string) => collections.find((c) => c.id === id),
+    [collections],
   )
 
   const expensesForProject = useCallback(
@@ -394,12 +579,21 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
       addProject,
       addPerson,
       addExpense,
+      updateExpense,
+      deleteExpense,
       addCollectedMoney,
+      updateCollectedMoney,
+      deleteCollectedMoney,
       projectById,
+      expenseById,
+      collectionById,
       expensesForProject,
       collectionsForProject,
       memberNameById,
       completeProject,
+      reopenProject,
+      updateProject,
+      deleteProject,
     }),
     [
       firebaseConfigured,
@@ -415,12 +609,21 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
       addProject,
       addPerson,
       addExpense,
+      updateExpense,
+      deleteExpense,
       addCollectedMoney,
+      updateCollectedMoney,
+      deleteCollectedMoney,
       projectById,
+      expenseById,
+      collectionById,
       expensesForProject,
       collectionsForProject,
       memberNameById,
       completeProject,
+      reopenProject,
+      updateProject,
+      deleteProject,
     ],
   )
 
