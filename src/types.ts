@@ -31,6 +31,7 @@ export type Expense = {
   notes?: string
   receiptImageUrl?: string
   receiptStoragePath?: string
+  createdBy?: string
 }
 
 export type AddExpenseInput = {
@@ -53,6 +54,7 @@ export type CollectedMoney = {
   recordedAt: string
   receivedFrom?: string
   notes?: string
+  createdBy?: string
 }
 
 export type AddCollectedMoneyInput = {

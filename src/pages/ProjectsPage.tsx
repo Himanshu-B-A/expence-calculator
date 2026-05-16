@@ -1,14 +1,27 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useExpenseApp } from '../context/ExpenseAppContext'
+import { OngoingActivityView } from '../components/OngoingActivityView'
 import { downloadProjectCsv } from '../lib/exportCsv'
 import { Button, Card, MoneyDisplay } from '../components/Ui'
 
 type Tab = 'ongoing' | 'completed'
+type OngoingView = 'cards' | 'activity'
 
 export function ProjectsPage() {
-  const { projects, expenses, collections, addProject, completeProject, isAdmin, expensesForProject, collectionsForProject } = useExpenseApp()
+  const {
+    projects,
+    expenses,
+    collections,
+    addProject,
+    completeProject,
+    isAdmin,
+    expensesForProject,
+    collectionsForProject,
+    memberNameById,
+  } = useExpenseApp()
   const [tab, setTab] = useState<Tab>('ongoing')
+  const [ongoingView, setOngoingView] = useState<OngoingView>('cards')
   const [newName, setNewName] = useState('')
   const [newSummary, setNewSummary] = useState('')
   const [showCreate, setShowCreate] = useState(false)
@@ -136,6 +149,31 @@ export function ProjectsPage() {
         ))}
       </div>
 
+      {tab === 'ongoing' && filtered.length > 0 && (
+        <div className="flex gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-1.5">
+          {(
+            [
+              ['cards', 'Card view'],
+              ['activity', 'Activity view'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setOngoingView(key)}
+              className={[
+                'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none',
+                ongoingView === key
+                  ? 'bg-zinc-800 text-white shadow-inner ring-1 ring-zinc-700'
+                  : 'text-zinc-500 hover:text-zinc-300',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <Card className="py-16 text-center text-zinc-500">
           No {tab} projects yet.{' '}
@@ -147,6 +185,28 @@ export function ProjectsPage() {
               ? 'Mark an active project as completed.'
               : 'An admin must mark active projects as completed before they appear here.'}
         </Card>
+      ) : tab === 'ongoing' && ongoingView === 'activity' ? (
+        <OngoingActivityView
+          projects={filtered}
+          expensesForProject={expensesForProject}
+          collectionsForProject={collectionsForProject}
+          memberNameById={memberNameById}
+          spentByProject={totalsByProject}
+          collectedByProject={collectedByProject}
+          isAdmin={isAdmin}
+          onComplete={async (projectId, name) => {
+            if (!confirm(`Mark “${name}” as completed?`)) return
+            await completeProject(projectId)
+          }}
+          onDownload={(project) =>
+            downloadProjectCsv(
+              project,
+              expensesForProject(project.id),
+              collectionsForProject(project.id),
+              memberNameById,
+            )
+          }
+        />
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
           {filtered.map((p) => {
@@ -223,6 +283,7 @@ export function ProjectsPage() {
                             p,
                             expensesForProject(p.id),
                             collectionsForProject(p.id),
+                            memberNameById,
                           )
                         }
                         className="inline-flex w-full items-center justify-center rounded-xl border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"

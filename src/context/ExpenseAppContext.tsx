@@ -61,6 +61,7 @@ type ExpenseAppValue = {
   projectById: (id: string) => Project | undefined
   expensesForProject: (projectId: string) => Expense[]
   collectionsForProject: (projectId: string) => CollectedMoney[]
+  memberNameById: (uid?: string) => string
   completeProject: (projectId: string) => Promise<void>
 }
 
@@ -91,6 +92,7 @@ function mapExpense(d: QueryDocumentSnapshot<DocumentData>): Expense {
     notes: data.notes ? String(data.notes) : undefined,
     receiptImageUrl: data.receiptImageUrl ? String(data.receiptImageUrl) : undefined,
     receiptStoragePath: data.receiptStoragePath ? String(data.receiptStoragePath) : undefined,
+    createdBy: data.createdBy ? String(data.createdBy) : undefined,
   }
 }
 
@@ -105,6 +107,7 @@ function mapCollection(d: QueryDocumentSnapshot<DocumentData>): CollectedMoney {
     recordedAt: String(data.recordedAt ?? ''),
     receivedFrom: data.receivedFrom ? String(data.receivedFrom) : undefined,
     notes: data.notes ? String(data.notes) : undefined,
+    createdBy: data.createdBy ? String(data.createdBy) : undefined,
   }
 }
 
@@ -364,6 +367,15 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
     [collections],
   )
 
+  const memberNameById = useCallback(
+    (uid?: string) => {
+      if (!uid) return 'Unknown'
+      const member = teamMembers.find((m) => m.id === uid)
+      return member?.displayName ?? 'Unknown'
+    },
+    [teamMembers],
+  )
+
   const isAuthenticated = userUid !== null
 
   const value = useMemo<ExpenseAppValue>(
@@ -386,6 +398,7 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
       projectById,
       expensesForProject,
       collectionsForProject,
+      memberNameById,
       completeProject,
     }),
     [
@@ -406,6 +419,7 @@ export function ExpenseAppProvider({ children }: { children: ReactNode }) {
       projectById,
       expensesForProject,
       collectionsForProject,
+      memberNameById,
       completeProject,
     ],
   )

@@ -5,7 +5,7 @@ import { downloadAllProjectsCsv } from '../lib/exportCsv'
 import { Button, Card, MoneyDisplay } from '../components/Ui'
 
 export function ReportPage() {
-  const { projects, expenses, collections, isAdmin } = useExpenseApp()
+  const { projects, expenses, collections, isAdmin, memberNameById } = useExpenseApp()
 
   const completed = useMemo(
     () => projects.filter((p) => p.status === 'completed'),
@@ -41,7 +41,7 @@ export function ReportPage() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => downloadAllProjectsCsv(projects, expenses, collections)}
+            onClick={() => downloadAllProjectsCsv(projects, expenses, collections, memberNameById)}
           >
             Download all CSV
           </Button>

@@ -31,7 +31,7 @@ function formatMonthLabel(key: string) {
 
 export function ReportDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { projectById, expensesForProject, collectionsForProject } = useExpenseApp()
+  const { projectById, expensesForProject, collectionsForProject, memberNameById } = useExpenseApp()
   const project = projectId ? projectById(projectId) : undefined
   const list = useMemo(
     () => (projectId ? expensesForProject(projectId) : []),
@@ -110,7 +110,7 @@ export function ReportDetailPage() {
             type="button"
             variant="secondary"
             className="shrink-0"
-            onClick={() => downloadProjectCsv(project, list, collectedList)}
+            onClick={() => downloadProjectCsv(project, list, collectedList, memberNameById)}
           >
             Download CSV
           </Button>
@@ -264,6 +264,9 @@ export function ReportDetailPage() {
                       {e.paymentMethod ? ` · ${e.paymentMethod.replace('_', ' ')}` : ''}
                     </p>
                     {e.notes && <p className="mt-1 text-xs text-zinc-400">{e.notes}</p>}
+                    <p className="mt-1 text-xs text-violet-300/90">
+                      Added by {memberNameById(e.createdBy)}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-white">
@@ -299,6 +302,9 @@ export function ReportDetailPage() {
                         {c.receivedFrom ? ` · from ${c.receivedFrom}` : ''}
                       </p>
                       {c.notes && <p className="mt-1 text-xs text-zinc-400">{c.notes}</p>}
+                      <p className="mt-1 text-xs text-violet-300/90">
+                        Added by {memberNameById(c.createdBy)}
+                      </p>
                     </div>
                     <p className="font-semibold text-emerald-300">
                       <MoneyDisplay value={c.amount} />

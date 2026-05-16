@@ -9,11 +9,14 @@ function formatInr(amount: number): string {
   return amount.toFixed(2)
 }
 
+type NameFn = (uid?: string) => string
+
 type ExportRow = {
   type: 'Expense' | 'Collected'
   date: string
   description: string
   amount: number
+  addedBy: string
   category: string
   vendorOrFrom: string
   paymentOrNotes: string
@@ -21,12 +24,13 @@ type ExportRow = {
   receiptUrl: string
 }
 
-function expenseRows(expenses: Expense[]): ExportRow[] {
+function expenseRows(expenses: Expense[], nameFn: NameFn): ExportRow[] {
   return expenses.map((e) => ({
     type: 'Expense',
     date: e.recordedAt,
     description: e.title,
     amount: e.amount,
+    addedBy: nameFn(e.createdBy),
     category: e.category ?? '',
     vendorOrFrom: e.vendor ?? '',
     paymentOrNotes: e.paymentMethod?.replace('_', ' ') ?? '',
@@ -35,12 +39,13 @@ function expenseRows(expenses: Expense[]): ExportRow[] {
   }))
 }
 
-function collectedRows(items: CollectedMoney[]): ExportRow[] {
+function collectedRows(items: CollectedMoney[], nameFn: NameFn): ExportRow[] {
   return items.map((c) => ({
     type: 'Collected',
     date: c.recordedAt,
     description: c.title,
     amount: c.amount,
+    addedBy: nameFn(c.createdBy),
     category: '',
     vendorOrFrom: c.receivedFrom ?? '',
     paymentOrNotes: '',
@@ -56,6 +61,7 @@ function buildCsv(rows: ExportRow[], projectName: string): string {
     'Date',
     'Description',
     'Amount (INR)',
+    'Added by',
     'Category',
     'Vendor / Received from',
     'Payment method',
@@ -71,6 +77,7 @@ function buildCsv(rows: ExportRow[], projectName: string): string {
         r.date,
         escapeCsv(r.description),
         formatInr(r.amount),
+        escapeCsv(r.addedBy),
         escapeCsv(r.category),
         escapeCsv(r.vendorOrFrom),
         escapeCsv(r.paymentOrNotes),
@@ -83,9 +90,9 @@ function buildCsv(rows: ExportRow[], projectName: string): string {
   const expenseTotal = rows.filter((r) => r.type === 'Expense').reduce((s, r) => s + r.amount, 0)
   const collectedTotal = rows.filter((r) => r.type === 'Collected').reduce((s, r) => s + r.amount, 0)
   lines.push('')
-  lines.push(`Summary,,,,,,,,`)
-  lines.push(`Total expenses,,,,${formatInr(expenseTotal)},,,,,`)
-  lines.push(`Total collected,,,,${formatInr(collectedTotal)},,,,,`)
+  lines.push(`Summary,,,,,,,,,`)
+  lines.push(`Total expenses,,,,${formatInr(expenseTotal)},,,,,,`)
+  lines.push(`Total collected,,,,${formatInr(collectedTotal)},,,,,,`)
 
   return lines.join('\n')
 }
@@ -104,10 +111,11 @@ export function downloadProjectCsv(
   project: Project,
   expenses: Expense[],
   collections: CollectedMoney[],
+  memberNameById: NameFn,
 ) {
   const rows = [
-    ...expenseRows(expenses),
-    ...collectedRows(collections),
+    ...expenseRows(expenses, memberNameById),
+    ...collectedRows(collections, memberNameById),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type))
 
   const safeName = project.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-') || 'project'
@@ -119,15 +127,16 @@ export function downloadAllProjectsCsv(
   projects: Project[],
   expenses: Expense[],
   collections: CollectedMoney[],
+  memberNameById: NameFn,
 ) {
   const rows: ExportRow[] = []
   for (const p of projects) {
     const projExpenses = expenses.filter((e) => e.projectId === p.id)
     const projCollections = collections.filter((c) => c.projectId === p.id)
-    for (const r of expenseRows(projExpenses)) {
+    for (const r of expenseRows(projExpenses, memberNameById)) {
       rows.push({ ...r, description: `[${p.name}] ${r.description}` })
     }
-    for (const r of collectedRows(projCollections)) {
+    for (const r of collectedRows(projCollections, memberNameById)) {
       rows.push({ ...r, description: `[${p.name}] ${r.description}` })
     }
   }
@@ -141,6 +150,7 @@ export function downloadAllProjectsCsv(
     'Date',
     'Description',
     'Amount (INR)',
+    'Added by',
     'Category',
     'Vendor / Received from',
     'Payment method',
@@ -155,6 +165,7 @@ export function downloadAllProjectsCsv(
         r.date,
         escapeCsv(r.description),
         formatInr(r.amount),
+        escapeCsv(r.addedBy),
         escapeCsv(r.category),
         escapeCsv(r.vendorOrFrom),
         escapeCsv(r.paymentOrNotes),
@@ -163,8 +174,8 @@ export function downloadAllProjectsCsv(
       ].join(','),
     ),
     '',
-    `Total expenses,,,${formatInr(expenseTotal)},,,,`,
-    `Total collected,,,${formatInr(collectedTotal)},,,,`,
+    `Total expenses,,,${formatInr(expenseTotal)},,,,,`,
+    `Total collected,,,${formatInr(collectedTotal)},,,,,`,
   ]
 
   triggerDownload(`all-expenses-${new Date().toISOString().slice(0, 10)}.csv`, lines.join('\n'))
